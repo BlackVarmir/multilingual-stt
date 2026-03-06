@@ -33,5 +33,5 @@ USE_FP16 = True if DEVICE == "cuda" else False
 
 # === VAD ===
 VAD_AGGRESSIVENESS = 2  # 0-3, вище = агресивніше фільтрує тишу
-VAD_MIN_VOICED_FRAMES = 3  # мінімум voiced frames для старту
-VAD_MIN_SILENCE_FRAMES = 10  # мінімум silence frames для кінця
+VAD_MIN_VOICED_FRAMES = 2  # було 3, тепер швидше стартує. мінімум voiced frames для старту
+VAD_MIN_SILENCE_FRAMES = 6  # було 10, тепер швидше фіксує кінець фрази. мінімум silence frames для кінця

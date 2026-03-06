@@ -1,0 +1,22 @@
+{
+    "STT": {"full": "Speech-to-Text", "uk": "мовлення в текст"},
+    "TTS": {"full": "Text-to-Speech", "uk": "текст у мовлення"},
+    "ASR": {"full": "Automatic Speech Recognition", "uk": "автоматичне розпізнавання мовлення"},
+    "NLP": {"full": "Natural Language Processing", "uk": "обробка природної мови"},
+    "API": {"full": "Application Programming Interface", "uk": "програмний інтерфейс"},
+    "GPU": {"full": "Graphics Processing Unit", "uk": "графічний процесор"},
+    "CPU": {"full": "Central Processing Unit", "uk": "центральний процесор"},
+    "RAM": {"full": "Random Access Memory", "uk": "оперативна пам'ять"},
+    "AI": {"full": "Artificial Intelligence", "uk": "штучний інтелект"},
+    "ML": {"full": "Machine Learning", "uk": "машинне навчання"},
+    "DL": {"full": "Deep Learning", "uk": "глибоке навчання"},
+    "CNN": {"full": "Convolutional Neural Network", "uk": "згорткова нейронна мережа"},
+    "RNN": {"full": "Recurrent Neural Network", "uk": "рекурентна нейронна мережа"},
+    "LLM": {"full": "Large Language Model", "uk": "велика мовна модель"},
+    "CUDA": {"full": "Compute Unified Device Architecture", "uk": "архітектура паралельних обчислень"},
+    "ONNX": {"full": "Open Neural Network Exchange", "uk": "відкритий формат нейромереж"},
+    "VRAM": {"full": "Video Random Access Memory", "uk": "відеопам'ять"},
+    "OS": {"full": "Operating System", "uk": "операційна система"},
+    "HTTP": {"full": "HyperText Transfer Protocol", "uk": "протокол передачі даних"},
+    "SQL": {"full": "Structured Query Language", "uk": "мова структурованих запитів"}
+}
