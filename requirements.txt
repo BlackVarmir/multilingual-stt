@@ -14,14 +14,23 @@ protobuf>=3.20.0
 
 # Data
 numpy>=1.24.0
+datasets>=2.14.0
+
+# ONNX
+onnx>=1.17.0
+onnxruntime>=1.16.0
+onnxscript>=0.6.0
+
+# API
+fastapi>=0.100.0
+uvicorn>=0.23.0
+websockets>=11.0
+
+# Post-processing
+deepmultilingualpunctuation>=1.0.0
 
 # Utils
 tqdm>=4.65.0
 
 # Testing
 pytest>=7.4.0
-
-# ONNX
-onnx>=1.17.0
-onnxruntime>=1.16.0
-onnxscript>=0.6.0

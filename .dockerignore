@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+.git/
+.idea/
+data/
+tests/
+scripts/
+docs/
+*.md
+!README.md
