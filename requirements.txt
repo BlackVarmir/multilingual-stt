@@ -1,22 +1,27 @@
 # Core ML
-  torch>=2.1.0
-  torchaudio>=2.1.0
-  transformers>=4.36.0
+torch>=2.1.0
+torchaudio>=2.1.0
+transformers>=4.36.0
 
-  # Audio
-  sounddevice>=0.4.6
-  webrtcvad>=2.0.10
-  soundfile>=0.12.0
+# Audio
+sounddevice>=0.4.6
+webrtcvad>=2.0.10
+soundfile>=0.12.0
 
-  # MMS
-  sentencepiece>=0.1.99
-  protobuf>=3.20.0
+# MMS
+sentencepiece>=0.1.99
+protobuf>=3.20.0
 
-  # Data
-  numpy>=1.24.0
+# Data
+numpy>=1.24.0
 
-  # Utils
-  tqdm>=4.65.0
+# Utils
+tqdm>=4.65.0
 
-  # Testing
-  pytest>=7.4.0
+# Testing
+pytest>=7.4.0
+
+# ONNX
+onnx>=1.17.0
+onnxruntime>=1.16.0
+onnxscript>=0.6.0
