@@ -34,6 +34,10 @@ def main():
       help="Автоматичне визначення мови"
   )
   parser.add_argument(
+      "--no-punctuation", action="store_true",
+      help="Вимкнути автоматичну пунктуацію"
+  )
+  parser.add_argument(
       "--device", default=DEVICE,
       choices=["cpu", "cuda"],
       help=f"Пристрій для inference (default: {DEVICE})"
@@ -44,6 +48,7 @@ def main():
   print(f"Source: {SUPPORTED_LANGUAGES[args.source_lang]['name']}")
   print(f"Target: {SUPPORTED_LANGUAGES[target]['name']}")
   print(f"Auto-detect: {args.auto_detect}")
+  print(f"Punctuation: {not args.no_punctuation}")
   print(f"Device: {args.device}")
   print("Press Ctrl+C to stop\n")
 
@@ -53,6 +58,7 @@ def main():
       target_lang=target,
       device=args.device,
       auto_detect_lang=args.auto_detect,
+      use_punctuation=not args.no_punctuation,
   )
   pipeline.run(callback=print_result)
 

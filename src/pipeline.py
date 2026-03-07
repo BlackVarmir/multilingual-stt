@@ -9,13 +9,15 @@ from src.asr.model import ASRModel
 from src.lang_detect.detector import AudioLanguageDetector
 from src.translation.translator import Translator
 from src.abbreviations.handler import AbbreviationHandler
+from src.postprocessing.punctuation import PunctuationRestorer
+from src.postprocessing.spelling import SpellingCorrector
 
 
 class StreamingSTTPipeline:
   """Streaming Speech-to-Text Pipeline з перекладом"""
 
   def __init__(self, source_lang="uk", target_lang="uk", device="cpu",
-               auto_detect_lang=False):
+               auto_detect_lang=False, use_punctuation=True):
       self.source_lang = source_lang
       self.target_lang = target_lang
       self.auto_detect_lang = auto_detect_lang
@@ -35,6 +37,12 @@ class StreamingSTTPipeline:
       # Переклад — тільки якщо мови різні
       self.translator = Translator(device=device)
       self.abbreviations = AbbreviationHandler()
+      self.spelling = SpellingCorrector()
+
+      # Пунктуація — опціонально (важка модель)
+      self.punctuation = None
+      if use_punctuation:
+          self.punctuation = PunctuationRestorer()
 
       self._running = False
       self._speech_buffer = []
@@ -47,7 +55,6 @@ class StreamingSTTPipeline:
 
       lang_code, confidence = self.lid.detect(audio)
 
-      # Знайти відповідний ключ в SUPPORTED_LANGUAGES
       for key, config in SUPPORTED_LANGUAGES.items():
           if config["mms_code"] == lang_code:
               if key != self.source_lang and confidence > 0.7:
@@ -58,6 +65,14 @@ class StreamingSTTPipeline:
 
       return self.source_lang
 
+  def _postprocess(self, text):
+      """Пунктуація, корекція, абревіатури"""
+      text = self.abbreviations.process(text)
+      text = self.spelling.correct(text)
+      if self.punctuation:
+          text = self.punctuation.restore(text)
+      return text
+
   def process_chunk(self, audio_chunk):
       """Обробити один чанк аудіо"""
       is_speaking, just_started, just_ended = self.vad.update(audio_chunk)
@@ -67,22 +82,20 @@ class StreamingSTTPipeline:
 
       if is_speaking:
           self._speech_buffer.append(audio_chunk)
-          # Partial result — швидко, без перекладу
           audio = np.concatenate(self._speech_buffer)
           audio = preprocess_audio(audio)
           text = self.asr.transcribe(audio)
           return {"text": text, "lang": self.source_lang, "is_final": False}
 
       if just_ended and self._speech_buffer:
-          # Final result — з перекладом
           audio = np.concatenate(self._speech_buffer)
           audio = preprocess_audio(audio)
 
           if self.auto_detect_lang:
               self._detect_language(audio)
 
-          text = self.asr.transcribe(audio)
-          text = self.abbreviations.process(text)
+          raw_text = self.asr.transcribe(audio)
+          text = self._postprocess(raw_text)
 
           translated = self.translator.translate(
               text, self.source_lang, self.target_lang
@@ -91,7 +104,7 @@ class StreamingSTTPipeline:
           self._speech_buffer = []
           return {
               "text": translated,
-              "original": text,
+              "original": raw_text,
               "lang": self.source_lang,
               "is_final": True,
           }
