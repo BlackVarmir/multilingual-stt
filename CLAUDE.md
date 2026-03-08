@@ -152,16 +152,16 @@ CLI, WebSocket API, Docker, деплой.
 
 ## Поточний стан
 
-**Фаза: 6 — Production (завершена)**
+**Фаза: 6 — Production (все завершено)**
 
 Фаза 1: Streaming STT — мікрофон → VAD → MMS-1B → текст українською.
 Фаза 2: LID, переклад (NLLB-200), абревіатури.
 Фаза 3: ONNX експорт + inference (1.4x speedup).
-Фаза 4: Скрипти тренування, аугментація (запуск на A100 — ще не виконано).
+Фаза 4: Fine-tune на FLEURS Ukrainian (A100, 20 epochs, WER: 34.8% → 21.2%).
 Фаза 5: Пунктуація, корекція орфографії.
 Фаза 6: WebSocket API (FastAPI), Dockerfile.
 
-Залишилось: запустити fine-tune на RunPod A100.
+Fine-tuned модель: https://huggingface.co/BlackVarmir/multilingual-stt-uk
 
 ## Важливі обмеження
 
