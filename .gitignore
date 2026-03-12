@@ -5,3 +5,7 @@ models/
 *.onnx
 .env
 .idea/
+data/common_voice/
+data/prepared/
+venv312/
+*.tar.gz
