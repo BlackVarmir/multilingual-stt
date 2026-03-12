@@ -79,10 +79,10 @@ def compute_wer(pred, processor):
 
 def main():
   # Параметри
-  model_name = "facebook/mms-1b-all"
+  model_name = "/workspace/multilingual-stt/models/mms-finetuned"
   lang = "ukr"
-  output_dir = "/workspace/storage/models/mms-finetuned"
-  data_dir = "/workspace/storage/data/raw/common_voice_uk"
+  output_dir = "/workspace/multilingual-stt/models/mms-finetuned-cv"
+  data_dir = "/workspace/multilingual-stt/data/prepared/common_voice_u20
 
   device = "cuda" if torch.cuda.is_available() else "cpu"
   print(f"Device: {device}")
@@ -128,8 +128,8 @@ def main():
       eval_steps=1000,
       save_steps=1000,
       save_total_limit=3,
-      num_train_epochs=30,
-      learning_rate=1e-4,
+      num_train_epochs=20,
+      learning_rate=1e-5,
       fp16=torch.cuda.is_available(),
       logging_steps=100,
       load_best_model_at_end=True,
