@@ -82,7 +82,7 @@ def main():
   model_name = "/workspace/multilingual-stt/models/mms-finetuned"
   lang = "ukr"
   output_dir = "/workspace/multilingual-stt/models/mms-finetuned-cv"
-  data_dir = "/workspace/multilingual-stt/data/prepared/common_voice_u20
+  data_dir = "/workspace/multilingual-stt/data/prepared/common_voice_uk"
 
   device = "cuda" if torch.cuda.is_available() else "cpu"
   print(f"Device: {device}")
