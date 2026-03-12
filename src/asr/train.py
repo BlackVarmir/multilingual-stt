@@ -93,7 +93,7 @@ def main():
   processor.tokenizer.set_target_lang(lang)
 
   model = Wav2Vec2ForCTC.from_pretrained(model_name)
-  model.load_adapter(lang)
+  # model.load_adapter(lang)
 
   # Заморозити feature encoder (тренуємо тільки адаптер і CTC head)
   model.freeze_feature_encoder()
