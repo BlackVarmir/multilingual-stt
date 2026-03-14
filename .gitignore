@@ -10,3 +10,5 @@ data/prepared/
 venv312/
 *.tar.gz
 kenlm_build/
+data/wiki_corpus.txt
+data/combined_corpus.txt

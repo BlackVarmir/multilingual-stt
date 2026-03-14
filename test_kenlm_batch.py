@@ -11,7 +11,7 @@ model = Wav2Vec2ForCTC.from_pretrained(model_path)
 model.eval()
 
 beam_decoder = BeamSearchDecoder(processor,
-kenlm_model_path="models/uk_5gram.bin")
+kenlm_model_path="models/uk_5gram_wiki.bin")
 
 clips_dir = "data/common_voice/cv-corpus-24.0-2025-12-05/uk/clips/"
 samples = [
