@@ -9,3 +9,4 @@ data/common_voice/
 data/prepared/
 venv312/
 *.tar.gz
+kenlm_build/
