@@ -14,6 +14,7 @@ from transformers import (
   AutoProcessor,
   TrainingArguments,
   Trainer,
+  EarlyStoppingCallback,
 )
 from src.asr.augmentation import AudioAugmentor
 
@@ -125,17 +126,18 @@ def main():
       per_device_train_batch_size=8,
       gradient_accumulation_steps=2,
       eval_strategy="steps",
-      eval_steps=1000,
-      save_steps=1000,
+      eval_steps=500,
+      save_steps=500,
       save_total_limit=3,
-      num_train_epochs=20,
-      learning_rate=1e-5,
+      num_train_epochs=5,
+      learning_rate=3e-5,
+      max_grad_norm=1.0,
       fp16=torch.cuda.is_available(),
-      logging_steps=100,
+      logging_steps=50,
       load_best_model_at_end=True,
       metric_for_best_model="wer",
       greater_is_better=False,
-      warmup_steps=500,
+      warmup_steps=200,
       report_to="none",
   )
 
@@ -148,6 +150,7 @@ def main():
       data_collator=DataCollatorCTCWithPadding(processor=processor),
       compute_metrics=lambda pred: compute_wer(pred, processor),
       processing_class=processor,
+      callbacks=[EarlyStoppingCallback(early_stopping_patience=3)],
   )
 
   # Тренування
