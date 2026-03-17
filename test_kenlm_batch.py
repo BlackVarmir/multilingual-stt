@@ -5,7 +5,7 @@ import torchaudio
 from transformers import Wav2Vec2ForCTC, AutoProcessor
 from src.decoder.beam_search import BeamSearchDecoder
 
-model_path = "models/mms-finetuned-cv"
+model_path = "models/mms-finetuned-cv2"
 processor = AutoProcessor.from_pretrained(model_path)
 model = Wav2Vec2ForCTC.from_pretrained(model_path)
 model.eval()

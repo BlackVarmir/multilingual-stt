@@ -157,11 +157,13 @@ CLI, WebSocket API, Docker, деплой.
 Фаза 1: Streaming STT — мікрофон → VAD → MMS-1B → текст українською.
 Фаза 2: LID, переклад (NLLB-200), абревіатури.
 Фаза 3: ONNX експорт + inference (1.4x speedup).
-Фаза 4: Fine-tune на FLEURS Ukrainian (A100, 20 epochs, WER: 34.8% → 21.2%).
-Фаза 5: Пунктуація, корекція орфографії.
+Фаза 4: Fine-tune на FLEURS + Common Voice Ukrainian (A100). Greedy WER: 40.5% → з KenLM beam search WER: **19.4%**.
+Фаза 5: Пунктуація, корекція орфографії, KenLM 5-gram (Wikipedia + Common Voice).
 Фаза 6: WebSocket API (FastAPI), Dockerfile.
 
-Fine-tuned модель: https://huggingface.co/BlackVarmir/multilingual-stt-uk
+Fine-tuned моделі:
+- https://huggingface.co/BlackVarmir/multilingual-stt-uk (FLEURS, WER 21.2%)
+- https://huggingface.co/BlackVarmir/multilingual-stt-uk-cv2 (+ Common Voice, WER 19.4% з KenLM)
 
 ## Важливі обмеження
 

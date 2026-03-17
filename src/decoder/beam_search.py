@@ -14,13 +14,20 @@ class BeamSearchDecoder:
       sorted_vocab = sorted(vocab.items(), key=lambda x: x[1])
       labels = [k for k, v in sorted_vocab]
 
-      # Витягнути unigrams з ARPA файлу
+      # Завантажити unigrams
       unigrams = None
-      if kenlm_model_path and kenlm_model_path.endswith('.bin'):
-          arpa_path = kenlm_model_path.replace('.bin', '.arpa')
-          try:
+      if kenlm_model_path:
+          # Спробувати окремий файл unigrams
+          import os
+          unigrams_path = os.path.join(os.path.dirname(kenlm_model_path), 'uk_unigrams.txt')
+          if os.path.exists(unigrams_path):
+              with open(unigrams_path, 'r', encoding='utf-8') as f:
+                  unigrams = [line.strip() for line in f if line.strip()]
+              print(f"Loaded {len(unigrams)} unigrams from {unigrams_path}")
+          elif kenlm_model_path.endswith('.arpa'):
+              # Парсити з ARPA
               unigrams = []
-              with open(arpa_path, 'r', encoding='utf-8') as f:
+              with open(kenlm_model_path, 'r', encoding='utf-8') as f:
                   in_unigrams = False
                   for line in f:
                       if line.startswith('\\1-grams:'):
@@ -32,8 +39,6 @@ class BeamSearchDecoder:
                           if len(parts) >= 2:
                               unigrams.append(parts[1])
               print(f"Loaded {len(unigrams)} unigrams from ARPA")
-          except FileNotFoundError:
-              unigrams = None
 
       # Побудувати декодер
       self.decoder = build_ctcdecoder(
