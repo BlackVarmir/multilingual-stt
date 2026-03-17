@@ -80,9 +80,9 @@ def compute_wer(pred, processor):
 
 def main():
   # Параметри
-  model_name = "/workspace/multilingual-stt/models/mms-finetuned"
+  model_name = "BlackVarmir/multilingual-stt-uk-cv2"
   lang = "ukr"
-  output_dir = "/workspace/multilingual-stt/models/mms-finetuned-cv"
+  output_dir = "/workspace/multilingual-stt/models/mms-finetuned-cv3"
   data_dir = "/workspace/multilingual-stt/data/prepared/common_voice_uk"
 
   device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -94,7 +94,12 @@ def main():
   processor.tokenizer.set_target_lang(lang)
 
   model = Wav2Vec2ForCTC.from_pretrained(model_name)
-  # model.load_adapter(lang)
+
+  # SpecAugment — маскує частини аудіо, модель вчиться узагальнювати
+  model.config.mask_time_prob = 0.4
+  model.config.mask_time_length = 10
+  model.config.mask_feature_prob = 0.1
+  model.config.mask_feature_length = 10
 
   # Заморозити feature encoder (тренуємо тільки адаптер і CTC head)
   model.freeze_feature_encoder()
@@ -102,7 +107,13 @@ def main():
   # Завантаження датасету
   print(f"Loading dataset from {data_dir}...")
   dataset = load_from_disk(data_dir)
+
+  # Об'єднати train + validation для більшого тренувального набору
+  from datasets import concatenate_datasets
   train_ds = dataset["train"]
+  if "validation" in dataset:
+      train_ds = concatenate_datasets([train_ds, dataset["validation"]])
+      print(f"Combined train + validation: {len(train_ds)} samples")
   test_ds = dataset["test"]
 
   # Ресемплінг до 16kHz
@@ -123,21 +134,22 @@ def main():
   # Параметри тренування
   training_args = TrainingArguments(
       output_dir=output_dir,
-      per_device_train_batch_size=8,
+      per_device_train_batch_size=16,
       gradient_accumulation_steps=2,
       eval_strategy="steps",
       eval_steps=500,
       save_steps=500,
       save_total_limit=3,
-      num_train_epochs=5,
-      learning_rate=3e-5,
+      num_train_epochs=10,
+      learning_rate=1e-5,
+      lr_scheduler_type="cosine",
       max_grad_norm=1.0,
       fp16=torch.cuda.is_available(),
       logging_steps=50,
       load_best_model_at_end=True,
       metric_for_best_model="wer",
       greater_is_better=False,
-      warmup_steps=200,
+      warmup_ratio=0.1,
       report_to="none",
   )
 
@@ -150,7 +162,7 @@ def main():
       data_collator=DataCollatorCTCWithPadding(processor=processor),
       compute_metrics=lambda pred: compute_wer(pred, processor),
       processing_class=processor,
-      callbacks=[EarlyStoppingCallback(early_stopping_patience=3)],
+      callbacks=[EarlyStoppingCallback(early_stopping_patience=5)],
   )
 
   # Тренування
