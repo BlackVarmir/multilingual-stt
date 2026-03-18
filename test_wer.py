@@ -8,7 +8,7 @@ from src.decoder.beam_search import BeamSearchDecoder
 csv.field_size_limit(10*1024*1024)
 wer_metric = load("wer")
 
-model_path = "models/mms-finetuned-cv2"
+model_path = "models/mms-finetuned-cv3"
 processor = AutoProcessor.from_pretrained(model_path)
 model = Wav2Vec2ForCTC.from_pretrained(model_path)
 model.eval()

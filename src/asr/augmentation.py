@@ -78,4 +78,18 @@ class AudioAugmentor:
           snr = np.random.uniform(*snr_range)
           waveform = self.add_noise(waveform, snr_db=snr)
 
+      # Speed perturbation (0.9x - 1.1x)
+      if np.random.random() < 0.5:
+          factor = np.random.uniform(0.9, 1.1)
+          waveform = self.speed_perturb(waveform, factor)
+
+      return waveform
+
+  def speed_perturb(self, waveform, factor):
+      """Змінити швидкість через інтерполяцію (працює без sox)"""
+      orig_len = waveform.shape[-1]
+      new_len = int(orig_len / factor)
+      waveform = torch.nn.functional.interpolate(
+          waveform.unsqueeze(0), size=new_len, mode="linear", align_corners=False
+      ).squeeze(0)
       return waveform

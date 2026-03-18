@@ -80,9 +80,9 @@ def compute_wer(pred, processor):
 
 def main():
   # Параметри
-  model_name = "BlackVarmir/multilingual-stt-uk-cv2"
+  model_name = "BlackVarmir/multilingual-stt-uk-cv3"
   lang = "ukr"
-  output_dir = "/workspace/multilingual-stt/models/mms-finetuned-cv3"
+  output_dir = "/workspace/multilingual-stt/models/mms-finetuned-cv4"
   data_dir = "/workspace/multilingual-stt/data/prepared/common_voice_uk"
 
   device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -101,8 +101,7 @@ def main():
   model.config.mask_feature_prob = 0.1
   model.config.mask_feature_length = 10
 
-  # Заморозити feature encoder (тренуємо тільки адаптер і CTC head)
-  model.freeze_feature_encoder()
+  # Feature encoder РОЗМОРОЖЕНИЙ — тренуємо всю модель для кращої адаптації
 
   # Завантаження датасету
   print(f"Loading dataset from {data_dir}...")
@@ -134,14 +133,14 @@ def main():
   # Параметри тренування
   training_args = TrainingArguments(
       output_dir=output_dir,
-      per_device_train_batch_size=16,
-      gradient_accumulation_steps=2,
+      per_device_train_batch_size=8,
+      gradient_accumulation_steps=4,
       eval_strategy="steps",
       eval_steps=500,
       save_steps=500,
       save_total_limit=3,
-      num_train_epochs=10,
-      learning_rate=1e-5,
+      num_train_epochs=15,
+      learning_rate=5e-6,
       lr_scheduler_type="cosine",
       max_grad_norm=1.0,
       fp16=torch.cuda.is_available(),
