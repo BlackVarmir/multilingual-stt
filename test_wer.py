@@ -8,12 +8,12 @@ from src.decoder.beam_search import BeamSearchDecoder
 csv.field_size_limit(10*1024*1024)
 wer_metric = load("wer")
 
-model_path = "models/mms-finetuned-cv3"
+model_path = "models/mms-finetuned-cv4"
 processor = AutoProcessor.from_pretrained(model_path)
 model = Wav2Vec2ForCTC.from_pretrained(model_path)
 model.eval()
 
-beam_decoder = BeamSearchDecoder(processor, kenlm_model_path="models/uk_5gram_wiki.bin")
+beam_decoder = BeamSearchDecoder(processor, kenlm_model_path="models/uk_5gram.bin")
 clips_dir = "data/common_voice/cv-corpus-24.0-2025-12-05/uk/clips/"
 
 # Взяти 100 випадкових тестових записів

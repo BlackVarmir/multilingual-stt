@@ -80,9 +80,9 @@ def compute_wer(pred, processor):
 
 def main():
   # Параметри
-  model_name = "BlackVarmir/multilingual-stt-uk-cv3"
+  model_name = "BlackVarmir/multilingual-stt-uk-cv4"
   lang = "ukr"
-  output_dir = "/workspace/multilingual-stt/models/mms-finetuned-cv4"
+  output_dir = "/workspace/multilingual-stt/models/mms-finetuned-cv5"
   data_dir = "/workspace/multilingual-stt/data/prepared/common_voice_uk"
 
   device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -101,7 +101,20 @@ def main():
   model.config.mask_feature_prob = 0.1
   model.config.mask_feature_length = 10
 
-  # Feature encoder РОЗМОРОЖЕНИЙ — тренуємо всю модель для кращої адаптації
+  # Layer-wise lr: feature encoder повільніше, решта швидше
+  feature_encoder_params = []
+  other_params = []
+  for name, param in model.named_parameters():
+      if "feature_extractor" in name or "feature_projection" in name:
+          feature_encoder_params.append(param)
+      else:
+          other_params.append(param)
+
+  optimizer = torch.optim.AdamW([
+      {"params": feature_encoder_params, "lr": 1e-6},
+      {"params": other_params, "lr": 5e-6},
+  ], weight_decay=0.01)
+  print(f"Feature encoder params: {len(feature_encoder_params)}, Other params: {len(other_params)}")
 
   # Завантаження датасету
   print(f"Loading dataset from {data_dir}...")
@@ -141,7 +154,6 @@ def main():
       save_total_limit=3,
       num_train_epochs=15,
       learning_rate=5e-6,
-      lr_scheduler_type="cosine",
       max_grad_norm=1.0,
       fp16=torch.cuda.is_available(),
       logging_steps=50,
@@ -152,6 +164,13 @@ def main():
       report_to="none",
   )
 
+  # Cosine scheduler для кастомного optimizer
+  from transformers import get_cosine_schedule_with_warmup
+  num_training_steps = len(train_ds) // (training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps) * int(training_args.num_train_epochs)
+  num_warmup_steps = int(num_training_steps * 0.1)
+  scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps)
+  print(f"Total steps: {num_training_steps}, Warmup: {num_warmup_steps}")
+
   # Тренер
   trainer = Trainer(
       model=model,
@@ -161,6 +180,7 @@ def main():
       data_collator=DataCollatorCTCWithPadding(processor=processor),
       compute_metrics=lambda pred: compute_wer(pred, processor),
       processing_class=processor,
+      optimizers=(optimizer, scheduler),
       callbacks=[EarlyStoppingCallback(early_stopping_patience=5)],
   )
 
