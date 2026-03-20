@@ -32,18 +32,19 @@
 
 | Параметр | Рішення |
 |----------|---------|
-| ASR модель | MMS-300M CTC (Meta, 1100+ мов) |
+| ASR модель | MMS-1B-all CTC (Meta, 1100+ мов) |
+| Мовна модель | KenLM 5-gram (Wikipedia + Common Voice) |
 | Translation | NLLB-200-distilled-600M (Meta, 200 мов) |
-| Language ID | MMS LID |
+| Language ID | MMS LID-126 |
 | Мінімальні мови | Українська, Російська, Англійська |
 | Додаткові мови | Будь-які через NLLB (німецька, польська тощо) |
 | Streaming | Обов'язково, real-time |
-| Inference | GPU + CPU варіанти |
-| Тренування | RunPod Secure Cloud, A100 (~$12 разово) |
+| Inference | GPU (PyTorch FP16) + CPU (ONNX INT8 + CTranslate2) |
+| Тренування | RunPod On-Demand, A100 80GB |
 | Розробка/тести | Ноутбук, Nvidia Quadro P1000 (4GB VRAM, $0) |
 | Деплой (production) | VPS, CPU-only (ONNX INT8 + CTranslate2) |
 | Підхід | MVP → поступове покращення |
-| C++ | Аудіо-препроцесинг для швидкості |
+| Декодер | Greedy CTC + Beam Search з KenLM (pyctcdecode) |
 | Two-pass | Pass 1 — швидкий CTC, Pass 2 — async post-processing |
 
 ---
@@ -776,113 +777,82 @@ tests/test_multilingual_pipeline.py:
 ## 🎯 ФАЗА 4 — Fine-tuning на українських даних
 
 **Мета:** Значно покращити якість розпізнавання.
-**Час:** ~1-2 тижні
-**GPU:** A100 (RunPod, ~$10-15 на тренування)
+**GPU:** A100 80GB (RunPod On-Demand)
 
-### Крок 4.1 — Завантаження датасетів
+### Датасети
 
-```
-Створи data/download_datasets.py:
-- Mozilla Common Voice Ukrainian (~80 годин)
-- Mozilla Common Voice Russian (~частина, ~20%)
-- Mozilla Common Voice English (~частина, ~10%)
-- FLEURS Ukrainian (від Google)
-- Зберігай на Network Volume: /workspace/storage/data/
-```
+- **FLEURS Ukrainian** (Google) — початкове fine-tuning (~3k samples)
+- **Common Voice Ukrainian v24** (Mozilla) — основне тренування (~27k train, ~10k test, ~10k dev)
 
-**✅ Запитай користувача:** "Запусти python data/download_datasets.py. Це займе 30-60 хвилин. Напиши мені коли завершиться."
+### Аугментація (src/asr/augmentation.py)
 
-### Крок 4.2 — Data Augmentation
+- add_noise (SNR 10-30dB, 50% шанс)
+- speed_perturb (0.9-1.1x через інтерполяцію, 50% шанс)
+- SpecAugment (вбудований в Wav2Vec2: mask_time_prob=0.4, mask_feature_prob=0.1)
 
-```
-Створи src/asr/augmentation.py:
-- add_noise (SNR 10-30dB)
-- change_speed (0.9-1.1x)
-- change_pitch (±2 semitones)
-- SpecAugment (freq masks + time masks)
-```
+### Історія тренувань
 
-**✅ Запитай користувача:** "Створи src/asr/augmentation.py з цим кодом. Кажи коли готово."
+| Модель | База | Дані | Особливості | Greedy WER | Beam+KenLM |
+|--------|------|------|-------------|-----------|------------|
+| multilingual-stt-uk | mms-1b-all | FLEURS | frozen encoder, lr=1e-4 | 21.2% | — |
+| multilingual-stt-uk-cv2 | uk | Common Voice | frozen, lr=3e-5, 5 epochs | 41.2%* | 19.4% |
+| multilingual-stt-uk-cv3 | uk-cv2 | CV + val | frozen, SpecAugment, cosine, lr=1e-5 | 38.2%* | 20.6% |
+| multilingual-stt-uk-cv4 | uk-cv3 | CV + val | **unfrozen encoder**, lr=5e-6 | 39.2%* | 21.1% |
 
-### Крок 4.3 — Fine-tune MMS
+*\* Виміряно на 200 random test samples (seed=42). RunPod eval cv4 = 27.87%*
 
-```
-Створи src/asr/train.py:
+### Ключові уроки
 
-УВАГА: Перед цим кроком — запусти Pod з A100!
+1. **Frozen vs unfrozen feature encoder**: розморожений encoder дає потенційно краще, але потребує дуже низький lr (1e-6) інакше модель розвалюється (catastrophic forgetting після epoch 3-4)
+2. **Layer-wise lr**: feature encoder потребує 5-10x менший lr ніж решта моделі
+3. **SpecAugment**: вбудований в Wav2Vec2 через config, дає невелике покращення
+4. **KenLM**: beam search з KenLM дає 15-20% покращення WER поверх greedy
+5. **Проблема `<unk>`**: модель ставить `<unk>` замість першої літери речення (CTC початок аудіо)
+6. **Early stopping**: обов'язковий, patience=5. Без нього модель перенавчається
 
-Параметри тренування:
-  - Learning rate: 1e-4 (низький для fine-tune)
-  - Batch size: 8 (A100 дозволяє)
-  - Accumulate grad batches: 2 (ефективний batch = 16)
-  - Mixed precision: FP16
-  - Epochs: 30-50
-  - Validation кожні 1000 кроків
-  - Early stopping: patience 5 epochs
-  - Збереження top-3 чекпоінтів по WER
+### Наступний крок: cv5
 
-Після тренування:
-  - Зберіг модель на /workspace/storage/models/mms-finetuned/
-  - Запусти тести
-  - Експортуй в ONNX + INT8 (повтори Крок 3.1-3.2)
-  - Видали A100 Pod!
-```
-
-**✅ Запитай користувача:** "УВАГА: переконайся що ти на A100 Pod! Запусти python src/asr/train.py. Це займе 4-8 годин. Можеш залишити на ніч. Напиши результат коли завершиться."
+Скрипт готовий (src/asr/train.py):
+- База: cv4, layer-wise lr (feature encoder 1e-6, решта 5e-6)
+- Cosine scheduler з 10% warmup
+- SpecAugment + speed perturbation
+- 15 epochs, early stopping patience=5
 
 ### Критерії завершення Фази 4
 
-- [ ] WER на Ukrainian test set < 15%
-- [ ] Модель краще розуміє uk/ru/en ніж оригінальна MMS
-- [ ] Нові ONNX + INT8 моделі експортовані
-- [ ] CPU inference працює з fine-tuned моделлю
-
-**✅ Запитай користувача:** "Покажи фінальний WER. Якщо < 15% — супер! Не забудь зберегти модель на Network Volume і ВИДАЛИТИ A100 Pod!"
+- [x] Fine-tuned модель краще ніж базова MMS
+- [x] Моделі на HuggingFace (BlackVarmir/multilingual-stt-uk-cv*)
+- [ ] Greedy WER < 15% (поточний найкращий: ~27-39%)
+- [ ] Нові ONNX + INT8 моделі експортовані з найкращої версії
 
 ---
 
 ## 🔧 ФАЗА 5 — Advanced Post-processing
 
 **Мета:** KenLM, пунктуація, перевірка орфографії.
-**Час:** ~1-2 тижні
-**Де:** Ноутбук (P1000) або CPU
+**Де:** Ноутбук або CPU (KenLM будувався в WSL)
 
-### Крок 5.1 — KenLM Language Model
+### Крок 5.1 — KenLM Language Model (ЗРОБЛЕНО)
 
-```
-Створи src/decoder/build_lm.py:
-- Завантаж Ukrainian Wikipedia dump + Oscar corpus
-- Побудуй 5-gram KenLM модель
-- Працює на CPU, не потребує VRAM
+Побудовано два KenLM 5-gram:
 
-Створи src/decoder/beam_search.py:
-- CTC beam search з KenLM
-- Contextual biasing (список абревіатур і термінів)
-- Покращує WER на 10-20% vs greedy
-```
+| Модель | Джерело | Розмір | WER з cv2 |
+|--------|---------|--------|-----------|
+| uk_5gram.bin | Common Voice (47k речень) | 29MB | 20.3% |
+| uk_5gram_wiki.bin | Wikipedia + CV (12M речень) | 8.37GB | **19.4%** |
 
-**✅ Запитай користувача:** "Запусти build_lm.py для побудови KenLM. Покажи розмір файлу моделі."
+- Будувалось через KenLM lmplz + build_binary в WSL (потрібен libboost)
+- Декодер: src/decoder/beam_search.py (pyctcdecode)
+- Alpha=0.5, beta=1.0 (дефолтні — найкращі для wiki моделі)
+- Wiki модель не вміщає unigrams в пам'ять на ноутбуці (8.6M слів) — працює без них
 
-### Крок 5.2 — Punctuation & Capitalization
+### Крок 5.2 — Punctuation & Capitalization (ЗРОБЛЕНО)
 
-```
-Створи src/postprocessing/punctuation.py:
-- Pretrained модель для пунктуації
-- "я пішов в магазин купив хліб" → "Я пішов в магазин, купив хліб."
-```
+src/postprocessing/punctuation.py — працює.
 
-**✅ Запитай користувача:** "Створи punctuation.py і протестуй на прикладі. Покажи результат."
+### Крок 5.3 — Spelling Correction (ЗРОБЛЕНО)
 
-### Крок 5.3 — Spelling Correction
-
-```
-Створи src/postprocessing/spelling.py:
-- Український словник (hunspell)
-- Edit distance ≤ 2 для виправлення
-- Не чіпає абревіатури та іншомовні слова
-```
-
-**✅ Запитай користувача:** "Створи spelling.py і запусти повний pipeline тест. Покажи WER до і після post-processing."
+src/postprocessing/spelling.py — працює.
 
 ---
 
@@ -934,18 +904,19 @@ D) Як мікросервіс у Docker Compose
 
 ---
 
-## 📊 Очікувані результати
+## 📊 Реальні результати
 
-| Фаза | P1000 Latency | CPU Latency | WER (uk) | Переклад | Вартість |
-|------|--------------|-------------|----------|----------|----------|
-| 1 MVP | ~80ms | ~200ms | ~25-35% | Ні | $0 |
-| 2 Translation | ~120ms | ~300ms | ~25-35% | Так | $0 |
-| 3 Optimization | ~60ms | ~100ms | ~25-35% | Так | $0 |
-| 4 Fine-tune | ~60ms | ~100ms | ~12-18% | Так | ~$12 |
-| 5 Post-process | ~70ms | ~120ms | ~8-12% | Так + punct | $0 |
-| 6 Production | — | ~120ms | ~8-12% | Повний | $0 |
+| Фаза | WER (greedy) | WER (beam+KenLM) | Статус |
+|------|-------------|-------------------|--------|
+| 1 MVP (базова MMS-1B) | ~50-60% | — | ✅ |
+| 4 Fine-tune FLEURS | 21.2% | — | ✅ |
+| 4 Fine-tune + CV (cv2) | 41.2% | 19.4% | ✅ |
+| 4 + SpecAugment (cv3) | 38.2% | 20.6% | ✅ |
+| 4 + Unfrozen encoder (cv4) | 39.2% | 21.1% | ✅ |
+| 5 KenLM beam search | — | 19.4% (wiki) | ✅ |
+| 4 + Layer-wise lr (cv5) | ? | ? | Готовий до запуску |
 
-**Загальна вартість:** ~$30-50 на GPU cloud + час розробки.
+**Витрати на RunPod:** ~$15-20 загалом на всі тренування.
 
 ---
 

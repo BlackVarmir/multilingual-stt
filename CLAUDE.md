@@ -157,13 +157,18 @@ CLI, WebSocket API, Docker, деплой.
 Фаза 1: Streaming STT — мікрофон → VAD → MMS-1B → текст українською.
 Фаза 2: LID, переклад (NLLB-200), абревіатури.
 Фаза 3: ONNX експорт + inference (1.4x speedup).
-Фаза 4: Fine-tune на FLEURS + Common Voice Ukrainian (A100). Greedy WER: 40.5% → з KenLM beam search WER: **19.4%**.
+Фаза 4: Fine-tune на FLEURS + Common Voice Ukrainian (A100). Greedy WER покращення: 41.2% → 39.2% (cv4, unfrozen encoder). Beam+KenLM WER: **19.4%**.
 Фаза 5: Пунктуація, корекція орфографії, KenLM 5-gram (Wikipedia + Common Voice).
 Фаза 6: WebSocket API (FastAPI), Dockerfile.
 
 Fine-tuned моделі:
 - https://huggingface.co/BlackVarmir/multilingual-stt-uk (FLEURS, WER 21.2%)
-- https://huggingface.co/BlackVarmir/multilingual-stt-uk-cv2 (+ Common Voice, WER 19.4% з KenLM)
+- https://huggingface.co/BlackVarmir/multilingual-stt-uk-cv2 (+ Common Voice, greedy 41.2%)
+- https://huggingface.co/BlackVarmir/multilingual-stt-uk-cv3 (+ SpecAugment, greedy 38.2%)
+- https://huggingface.co/BlackVarmir/multilingual-stt-uk-cv4 (+ unfrozen encoder, greedy 39.2%, RunPod eval 27.87%)
+
+Відома проблема: модель ставить `<unk>` замість першої літери речення (CTC початок аудіо).
+Наступний крок: cv5 з layer-wise lr (feature encoder 1e-6, решта 5e-6) — скрипт готовий.
 
 ## Важливі обмеження
 
