@@ -109,15 +109,17 @@ def main():
     train_ds = train_ds.cast_column("audio", Audio(sampling_rate=16000))
     test_ds = test_ds.cast_column("audio", Audio(sampling_rate=16000))
 
-    # Підготовка даних
+    # Підготовка даних (num_proc для паралельної обробки)
     print("Preparing datasets...")
     train_ds = train_ds.map(
         lambda b: prepare_dataset(b, processor),
         remove_columns=train_ds.column_names,
+        num_proc=4,
     )
     test_ds = test_ds.map(
         lambda b: prepare_dataset(b, processor),
         remove_columns=test_ds.column_names,
+        num_proc=4,
     )
 
     # WER метрика
