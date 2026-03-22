@@ -105,21 +105,26 @@ def main():
         print(f"Combined train + validation: {len(train_ds)} samples")
     test_ds = dataset["test"]
 
+    # Менший eval set для швидкості (generate на 10k = години)
+    if len(test_ds) > 1000:
+        test_ds = test_ds.shuffle(seed=42).select(range(1000))
+        print(f"Using 1000 random test samples for eval")
+
     # Ресемплінг до 16kHz
     train_ds = train_ds.cast_column("audio", Audio(sampling_rate=16000))
     test_ds = test_ds.cast_column("audio", Audio(sampling_rate=16000))
 
-    # Підготовка даних (num_proc для паралельної обробки)
+    # Підготовка даних (num_proc=8 для швидкості)
     print("Preparing datasets...")
     train_ds = train_ds.map(
         lambda b: prepare_dataset(b, processor),
         remove_columns=train_ds.column_names,
-        num_proc=4,
+        num_proc=8,
     )
     test_ds = test_ds.map(
         lambda b: prepare_dataset(b, processor),
         remove_columns=test_ds.column_names,
-        num_proc=4,
+        num_proc=8,
     )
 
     # WER метрика
@@ -140,13 +145,13 @@ def main():
     # Параметри тренування
     training_args = Seq2SeqTrainingArguments(
         output_dir=output_dir,
-        per_device_train_batch_size=16,
-        gradient_accumulation_steps=2,
+        per_device_train_batch_size=32,
+        gradient_accumulation_steps=1,
         eval_strategy="steps",
-        eval_steps=500,
-        save_steps=500,
+        eval_steps=1000,
+        save_steps=1000,
         save_total_limit=3,
-        num_train_epochs=10,
+        num_train_epochs=5,
         learning_rate=1e-3,
         lr_scheduler_type="cosine",
         max_grad_norm=1.0,
