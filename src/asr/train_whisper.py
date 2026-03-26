@@ -73,6 +73,10 @@ def main():
         torch_dtype=torch.float16 if device == "cuda" else torch.float32,
     )
 
+    # Gradient checkpointing — зменшує VRAM в 2-3x
+    model.config.use_cache = False
+    model.gradient_checkpointing_enable()
+
     model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(
         language="uk", task="transcribe"
     )
@@ -136,8 +140,8 @@ def main():
 
     training_args = Seq2SeqTrainingArguments(
         output_dir=output_dir,
-        per_device_train_batch_size=32,
-        gradient_accumulation_steps=1,
+        per_device_train_batch_size=16,
+        gradient_accumulation_steps=2,
         eval_strategy="steps",
         eval_steps=1000,
         save_steps=1000,
@@ -156,6 +160,7 @@ def main():
         predict_with_generate=True,
         generation_max_length=225,
         dataloader_num_workers=4,
+        remove_unused_columns=False,
     )
 
     data_collator = DataCollatorSpeechSeq2SeqWithPadding(
