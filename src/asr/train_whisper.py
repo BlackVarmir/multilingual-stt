@@ -4,11 +4,12 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+import csv
 import torch
 import numpy as np
 from dataclasses import dataclass
 from typing import Dict, List, Union
-from datasets import load_from_disk, Audio, concatenate_datasets
+from datasets import Dataset, Audio, concatenate_datasets
 from transformers import (
     WhisperForConditionalGeneration,
     WhisperProcessor,
@@ -65,7 +66,6 @@ def main():
     # Параметри
     model_name = "openai/whisper-large-v3-turbo"
     output_dir = "/workspace/multilingual-stt/models/whisper-uk-lora"
-    data_dir = "/workspace/multilingual-stt/data/prepared/common_voice_uk"
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Device: {device}")
@@ -95,15 +95,25 @@ def main():
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
 
-    # Завантаження датасету
-    print(f"Loading dataset from {data_dir}...")
-    dataset = load_from_disk(data_dir)
+    # Завантаження датасету напряму з Common Voice TSV
+    cv_dir = "/workspace/multilingual-stt/data/common_voice/cv-corpus-24.0-2025-12-05/uk"
+    csv.field_size_limit(10 * 1024 * 1024)
 
-    train_ds = dataset["train"]
-    if "validation" in dataset:
-        train_ds = concatenate_datasets([train_ds, dataset["validation"]])
-        print(f"Combined train + validation: {len(train_ds)} samples")
-    test_ds = dataset["test"]
+    def load_cv_tsv(split_name):
+        rows = []
+        tsv_path = f"{cv_dir}/{split_name}.tsv"
+        clips_dir = f"{cv_dir}/clips/"
+        with open(tsv_path, "r", encoding="utf-8") as f:
+            for row in csv.DictReader(f, delimiter="\t"):
+                rows.append({"audio": clips_dir + row["path"], "sentence": row["sentence"]})
+        return Dataset.from_list(rows).cast_column("audio", Audio(sampling_rate=16000))
+
+    print("Loading Common Voice directly from TSV...")
+    train_ds = load_cv_tsv("train")
+    dev_ds = load_cv_tsv("dev")
+    test_ds = load_cv_tsv("test")
+    train_ds = concatenate_datasets([train_ds, dev_ds])
+    print(f"Train + dev: {len(train_ds)}, Test: {len(test_ds)}")
 
     # Менший eval set для швидкості (generate на 10k = години)
     if len(test_ds) > 1000:
