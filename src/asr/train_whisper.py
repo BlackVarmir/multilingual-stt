@@ -127,6 +127,12 @@ def main():
         remove_columns=["sentence"],
     )
 
+    # Whisper max label length = 448 tokens
+    train_before = len(train_ds)
+    train_ds = train_ds.filter(lambda x: len(x["labels"]) <= 448)
+    test_ds = test_ds.filter(lambda x: len(x["labels"]) <= 448)
+    print(f"Filtered: {train_before} -> {len(train_ds)} train, {len(test_ds)} test (max 448 tokens)")
+
     wer_metric = evaluate.load("wer")
 
     def compute_metrics(pred):
