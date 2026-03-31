@@ -1,10 +1,10 @@
 FROM runpod/pytorch:1.0.3-cu1290-torch280-ubuntu2404
 
-# s3fs для монтування Hetzner Object Storage
+# Системні залежності
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    s3fs \
     ffmpeg \
     git \
+    tmux \
     && rm -rf /var/lib/apt/lists/*
 
 # Python залежності для Whisper LoRA тренування

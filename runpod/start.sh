@@ -17,45 +17,35 @@ HETZNER_S3_BUCKET="${HETZNER_S3_BUCKET:-multilingual-stt}"
 echo "S3 Endpoint: $HETZNER_S3_ENDPOINT"
 echo "S3 Bucket:   $HETZNER_S3_BUCKET"
 
-# Записати credentials для s3fs
-echo "${HETZNER_S3_ACCESS_KEY}:${HETZNER_S3_SECRET_KEY}" > /etc/passwd-s3fs
-chmod 600 /etc/passwd-s3fs
+# Налаштувати AWS CLI для Hetzner S3
+mkdir -p ~/.aws
+cat > ~/.aws/credentials << EOF
+[default]
+aws_access_key_id = ${HETZNER_S3_ACCESS_KEY}
+aws_secret_access_key = ${HETZNER_S3_SECRET_KEY}
+EOF
 
-# --- 2. Монтування S3 ---
-S3_MOUNT="/workspace/s3"
-S3_CACHE="/tmp/s3cache"
-mkdir -p "$S3_MOUNT" "$S3_CACHE"
+cat > ~/.aws/config << EOF
+[default]
+region = fsn1
+s3 =
+    endpoint_url = ${HETZNER_S3_ENDPOINT}
+EOF
 
-echo "Mounting S3 bucket to $S3_MOUNT..."
-s3fs "$HETZNER_S3_BUCKET" "$S3_MOUNT" \
-    -o passwd_file=/etc/passwd-s3fs \
-    -o url="$HETZNER_S3_ENDPOINT" \
-    -o use_path_request_style \
-    -o allow_other \
-    -o use_cache="$S3_CACHE" \
-    -o ensure_diskfree=1024 \
-    -o parallel_count=5 \
-    -o multipart_size=64 \
-    -o max_stat_cache_size=10000 \
-    -o connect_timeout=10 \
-    -o retries=3
+export AWS_ENDPOINT_URL="$HETZNER_S3_ENDPOINT"
+S3_BASE="s3://${HETZNER_S3_BUCKET}/multilingual-stt-general"
 
-# Перевірка монтування
-if mountpoint -q "$S3_MOUNT"; then
-    echo "S3 mounted successfully!"
+# --- 2. Перевірка з'єднання з S3 ---
+echo "Checking S3 connection..."
+if aws s3 ls "s3://${HETZNER_S3_BUCKET}/" --endpoint-url "$HETZNER_S3_ENDPOINT" > /dev/null 2>&1; then
+    echo "S3 connection OK!"
 else
-    echo "ERROR: S3 mount failed!"
+    echo "ERROR: Cannot connect to S3! Check credentials and endpoint."
     exit 1
 fi
 
-# --- 3. Структура директорій ---
-BASE_DIR="$S3_MOUNT/multilingual-stt-general"
-REPO_DIR="$BASE_DIR/multilingual-stt"
-CV_DIR="$BASE_DIR/CommonVoice"
-
-mkdir -p "$BASE_DIR" "$CV_DIR"
-
-# --- 4. Git repo ---
+# --- 3. Git repo ---
+REPO_DIR="/workspace/multilingual-stt"
 if [ -d "$REPO_DIR/.git" ]; then
     echo "Repo exists, pulling latest..."
     cd "$REPO_DIR" && git pull || echo "WARNING: git pull failed, using existing version"
@@ -64,25 +54,75 @@ else
     git clone https://github.com/BlackVarmir/multilingual-stt.git "$REPO_DIR"
 fi
 
-# --- 5. Symlinks ---
-ln -sfn "$BASE_DIR" /workspace/multilingual-stt-general
-ln -sfn "$REPO_DIR" /workspace/multilingual-stt
+# --- 4. Sync Common Voice з S3 ---
+CV_LOCAL="/workspace/multilingual-stt/data/common_voice"
+mkdir -p "$CV_LOCAL"
 
-# --- 6. Статус ---
+echo "Checking CommonVoice on S3..."
+CV_COUNT=$(aws s3 ls "${S3_BASE}/CommonVoice/" --endpoint-url "$HETZNER_S3_ENDPOINT" 2>/dev/null | wc -l)
+if [ "$CV_COUNT" -gt 0 ]; then
+    echo "Syncing CommonVoice from S3 (archive only, no extract)..."
+    aws s3 sync "${S3_BASE}/CommonVoice/" "$CV_LOCAL/" --endpoint-url "$HETZNER_S3_ENDPOINT"
+    echo "CommonVoice synced: $(ls "$CV_LOCAL" | wc -l) files"
+else
+    echo "No CommonVoice data on S3 yet."
+fi
+
+# --- 5. Sync existing checkpoints from S3 ---
+MODELS_DIR="/workspace/multilingual-stt/models/whisper-uk-lora"
+mkdir -p "$MODELS_DIR"
+
+echo "Checking checkpoints on S3..."
+CP_COUNT=$(aws s3 ls "${S3_BASE}/checkpoints/" --endpoint-url "$HETZNER_S3_ENDPOINT" 2>/dev/null | wc -l)
+if [ "$CP_COUNT" -gt 0 ]; then
+    echo "Syncing checkpoints from S3..."
+    aws s3 sync "${S3_BASE}/checkpoints/" "$MODELS_DIR/" --endpoint-url "$HETZNER_S3_ENDPOINT"
+    echo "Checkpoints synced!"
+fi
+
+# --- 6. Створити хелпер скрипти ---
+cat > /usr/local/bin/s3-upload << 'SCRIPT'
+#!/bin/bash
+# Завантажити чекпоінти на S3
+ENDPOINT="${HETZNER_S3_ENDPOINT:-https://fsn1.your-objectstorage.com}"
+BUCKET="${HETZNER_S3_BUCKET:-multilingual-stt}"
+echo "Uploading checkpoints to S3..."
+aws s3 sync /workspace/multilingual-stt/models/whisper-uk-lora/ \
+    "s3://${BUCKET}/multilingual-stt-general/checkpoints/" \
+    --endpoint-url "$ENDPOINT"
+echo "Upload complete!"
+SCRIPT
+chmod +x /usr/local/bin/s3-upload
+
+cat > /usr/local/bin/s3-upload-cv << 'SCRIPT'
+#!/bin/bash
+# Завантажити Common Voice архів на S3
+ENDPOINT="${HETZNER_S3_ENDPOINT:-https://fsn1.your-objectstorage.com}"
+BUCKET="${HETZNER_S3_BUCKET:-multilingual-stt}"
+echo "Uploading CommonVoice to S3..."
+aws s3 sync /workspace/multilingual-stt/data/common_voice/ \
+    "s3://${BUCKET}/multilingual-stt-general/CommonVoice/" \
+    --endpoint-url "$ENDPOINT" \
+    --exclude "*clips/*" --exclude "*/clips/*"
+echo "Upload complete!"
+SCRIPT
+chmod +x /usr/local/bin/s3-upload-cv
+
+# --- 7. Статус ---
 echo ""
 echo "============================================"
 echo "  Pod Ready!"
 echo "============================================"
 echo "GPU: $(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null || echo 'No GPU')"
-echo "S3 Mount: $S3_MOUNT"
 echo "Repo: $REPO_DIR"
-echo "CommonVoice: $CV_DIR"
-echo "Files on S3: $(ls "$BASE_DIR" | wc -l) items"
+echo "S3 Bucket: $HETZNER_S3_BUCKET"
 echo ""
-echo "Usage:"
+echo "Commands:"
 echo "  cd /workspace/multilingual-stt"
-echo "  python src/asr/train_whisper.py"
+echo "  python src/asr/train_whisper.py   # start training"
+echo "  s3-upload                          # upload checkpoints to S3"
+echo "  s3-upload-cv                       # upload CV archive to S3"
 echo "============================================"
 
-# --- 7. Keep alive ---
+# --- 8. Keep alive ---
 sleep infinity

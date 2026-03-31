@@ -1,7 +1,7 @@
 # RunPod Template: Whisper LoRA Training with Hetzner S3
 
-Custom Docker template for RunPod that uses Hetzner Object Storage (S3-compatible) instead of Network Volume.
-All data persists on S3 — Pod can be terminated without data loss.
+Custom Docker template for RunPod that uses Hetzner Object Storage (S3-compatible) for persistent data.
+Pod can be terminated without data loss — checkpoints and datasets sync to/from S3.
 
 ## Quick Start
 
@@ -21,9 +21,8 @@ Go to RunPod Dashboard → Templates → New Template:
 |-------|-------|
 | Template Name | `whisper-lora-s3` |
 | Container Image | `blackvarmir/whisper-lora-runpod:latest` |
-| Container Disk | `20 GB` |
+| Container Disk | `50 GB` |
 | Volume Disk | `0 GB` (not needed, using S3) |
-| Volume Mount Path | `/workspace` |
 
 ### 3. Set Environment Variables
 
@@ -34,21 +33,13 @@ In RunPod Template or Pod settings, add:
 | `HETZNER_S3_ACCESS_KEY` | Your Hetzner S3 access key |
 | `HETZNER_S3_SECRET_KEY` | Your Hetzner S3 secret key |
 | `HETZNER_S3_ENDPOINT` | `https://fsn1.your-objectstorage.com` |
-| `HETZNER_S3_BUCKET` | `multilingual-stt` |
+| `HETZNER_S3_BUCKET` | Your bucket name |
 
-### 4. Create Pod
-
-- Select the template
-- Choose GPU: A100 80GB (recommended)
-- Start Pod
-
-### 5. SSH & Train
+### 4. Create Pod & Train
 
 ```bash
-# Connect via SSH
 ssh root@<pod-ip>
 
-# Start training in tmux
 tmux new -s train
 cd /workspace/multilingual-stt
 python src/asr/train_whisper.py
@@ -57,41 +48,31 @@ python src/asr/train_whisper.py
 # Reattach: tmux attach -t train
 ```
 
+### 5. Save Results to S3
+
+```bash
+s3-upload        # upload checkpoints to S3
+s3-upload-cv     # upload CommonVoice archive to S3
+```
+
+## How It Works
+
+- **On startup**: clones/pulls repo, syncs CommonVoice and checkpoints from S3
+- **During training**: everything runs locally on fast NVMe disk
+- **After training**: run `s3-upload` to push checkpoints back to S3
+
 ## S3 Structure
 
 ```
 S3 bucket/
 └── multilingual-stt-general/
-    ├── multilingual-stt/              ← GitHub repo (auto-cloned)
-    │   └── models/whisper-uk-lora/    ← Training checkpoints
-    └── CommonVoice/                   ← Dataset archive
+    ├── CommonVoice/                   ← Dataset archive
+    └── checkpoints/                   ← Training checkpoints
 ```
 
-## Upload CommonVoice to S3
+## Helper Commands
 
-Before first training, upload the dataset archive:
-
-```bash
-# On any machine with awscli
-aws s3 cp cv-corpus-24.0-2025-12-05-uk.tar.gz \
-    s3://multilingual-stt/multilingual-stt-general/CommonVoice/ \
-    --endpoint-url https://fsn1.your-objectstorage.com
-
-# Or on the Pod (after S3 is mounted)
-cp /path/to/cv-corpus-24.0-2025-12-05-uk.tar.gz /workspace/s3/multilingual-stt-general/CommonVoice/
-```
-
-## Paths on Pod
-
-| Path | Description |
-|------|-------------|
-| `/workspace/s3/` | S3 bucket mount point |
-| `/workspace/multilingual-stt/` | Symlink to repo on S3 |
-| `/workspace/multilingual-stt-general/` | Symlink to base dir on S3 |
-
-## Notes
-
-- **No Network Volume needed** — S3 is the persistent storage
-- **Pod is disposable** — terminate anytime, data stays on S3
-- **s3fs caching** — local cache at `/tmp/s3cache` speeds up repeated reads
-- **CommonVoice** — archive stored on S3, extract when needed for training
+| Command | Description |
+|---------|-------------|
+| `s3-upload` | Upload checkpoints to S3 |
+| `s3-upload-cv` | Upload CommonVoice archive to S3 |
