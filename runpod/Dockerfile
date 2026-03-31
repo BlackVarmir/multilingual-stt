@@ -1,4 +1,4 @@
-FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+FROM runpod/pytorch:1.0.3-cu1290-torch280-ubuntu2404
 
 # s3fs для монтування Hetzner Object Storage
 RUN apt-get update && apt-get install -y --no-install-recommends \
