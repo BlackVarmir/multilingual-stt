@@ -40,6 +40,7 @@ class DataCollatorSpeechSeq2SeqWithPadding:
             input_features.append({"input_features": mel})
 
         batch = self.processor.feature_extractor.pad(input_features, return_tensors="pt")
+        batch["input_features"] = batch["input_features"].half()
 
         label_features = [{"input_ids": f["labels"]} for f in features]
         labels_batch = self.processor.tokenizer.pad(label_features, return_tensors="pt")
