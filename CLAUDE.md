@@ -169,11 +169,12 @@ Fine-tuned моделі (MMS-1B CTC, застаріли):
 
 Fine-tuned моделі (Whisper large-v3-turbo + LoRA, актуальні):
 - https://huggingface.co/BlackVarmir/whisper-uk-lora-cv5 (CV, LoRA rank 32, 5 epochs, A100, WER 21.67%)
-- https://huggingface.co/BlackVarmir/whisper-uk-lora-cv6 (CV + FLEURS, SpecAugment, LoRA rank 64, 10 epochs, RTX PRO 4500 Blackwell, **WER 17.83%**)
+- https://huggingface.co/BlackVarmir/whisper-uk-lora-cv6 (CV + FLEURS, SpecAugment, LoRA rank 64, 10 epochs, RTX PRO 4500 Blackwell, greedy WER 17.83%, **beam+KenLM WER 14.34%**)
 
-Скрипти тренування:
+Скрипти тренування / evaluation:
 - `src/asr/train_whisper.py` — cv5 (LoRA rank 32, CV only, 5 epochs)
 - `src/asr/train_whisper_cv6.py` — cv6 (LoRA rank 64, CV + FLEURS, SpecAugment, 10 epochs з early stopping)
+- `src/asr/eval_whisper_kenlm.py` — beam search + KenLM rescoring для Whisper. Whisper надто впевнений в beam search (всі beams ідентичні), тому використовується hybrid: 1 beam top-1 + N-1 sampled (temperature=0.7, top_p=0.95). Найкращі параметри cv6: α=0.5, β=3.0, num_beams=5.
 
 GPU вибір для тренування:
 - **A100 80GB** ($1.49/hr) — стандарт, 3.5 сек/крок, ~6h
