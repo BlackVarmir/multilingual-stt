@@ -75,6 +75,8 @@ def generate_beam(model, processor, audio_array, num_beams: int, num_return_sequ
         max_new_tokens=225,
         language="uk",
         task="transcribe",
+        custom_generate="transformers-community/group-beam-search",
+        trust_remote_code=True,
     )
 
     sequences = outputs.sequences
