@@ -157,18 +157,28 @@ CLI, WebSocket API, Docker, деплой.
 Фаза 1: Streaming STT — мікрофон → VAD → MMS-1B → текст українською.
 Фаза 2: LID, переклад (NLLB-200), абревіатури.
 Фаза 3: ONNX експорт + inference (1.4x speedup).
-Фаза 4: Fine-tune на FLEURS + Common Voice Ukrainian (A100). Greedy WER покращення: 41.2% → 39.2% (cv4, unfrozen encoder). Beam+KenLM WER: **19.4%**.
+Фаза 4: Fine-tune на FLEURS + Common Voice Ukrainian. Перехід з MMS-1B на Whisper large-v3-turbo + LoRA. Greedy WER: 27.87% (cv4 MMS) → 21.67% (cv5 Whisper) → **17.83% (cv6 Whisper + FLEURS + SpecAugment + LoRA rank 64)**.
 Фаза 5: Пунктуація, корекція орфографії, KenLM 5-gram (Wikipedia + Common Voice).
 Фаза 6: WebSocket API (FastAPI), Dockerfile.
 
-Fine-tuned моделі:
+Fine-tuned моделі (MMS-1B CTC, застаріли):
 - https://huggingface.co/BlackVarmir/multilingual-stt-uk (FLEURS, WER 21.2%)
 - https://huggingface.co/BlackVarmir/multilingual-stt-uk-cv2 (+ Common Voice, greedy 41.2%)
 - https://huggingface.co/BlackVarmir/multilingual-stt-uk-cv3 (+ SpecAugment, greedy 38.2%)
 - https://huggingface.co/BlackVarmir/multilingual-stt-uk-cv4 (+ unfrozen encoder, greedy 39.2%, RunPod eval 27.87%)
 
-Відома проблема: модель ставить `<unk>` замість першої літери речення (CTC початок аудіо).
-Наступний крок: cv5 з layer-wise lr (feature encoder 1e-6, решта 5e-6) — скрипт готовий.
+Fine-tuned моделі (Whisper large-v3-turbo + LoRA, актуальні):
+- https://huggingface.co/BlackVarmir/whisper-uk-lora-cv5 (CV, LoRA rank 32, 5 epochs, A100, WER 21.67%)
+- https://huggingface.co/BlackVarmir/whisper-uk-lora-cv6 (CV + FLEURS, SpecAugment, LoRA rank 64, 10 epochs, RTX PRO 4500 Blackwell, **WER 17.83%**)
+
+Скрипти тренування:
+- `src/asr/train_whisper.py` — cv5 (LoRA rank 32, CV only, 5 epochs)
+- `src/asr/train_whisper_cv6.py` — cv6 (LoRA rank 64, CV + FLEURS, SpecAugment, 10 epochs з early stopping)
+
+GPU вибір для тренування:
+- **A100 80GB** ($1.49/hr) — стандарт, 3.5 сек/крок, ~6h
+- **RTX PRO 4500 Blackwell 32GB** ($0.74/hr) — швидший, 1.5 сек/крок, ~6h, потребує PyTorch 2.7+ з cu128
+- Для Blackwell (sm_120) обов'язково: `pip install --upgrade torch torchaudio --index-url https://download.pytorch.org/whl/cu128`
 
 ## Важливі обмеження
 
