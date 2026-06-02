@@ -57,36 +57,62 @@ def load_audio(path: str):
 
 @torch.no_grad()
 def generate_beam(model, processor, audio_array, num_beams: int, num_return_sequences: int, device: str):
-    """Generaciya N-best hipotez cherez beam search"""
+    """Generaciya N-best hipotez: top-1 beam search + (N-1) sampled hipotez"""
     inputs = processor(audio_array, sampling_rate=16000, return_tensors="pt")
     input_features = inputs.input_features.to(device)
     if device == "cuda":
         input_features = input_features.half()
 
-    # Diverse beam search: groups force vidchutno rizni hipotezy
-    outputs = model.generate(
+    all_texts = []
+    all_scores = []
+
+    # 1) Beam search top-1 — najbilsh imovirna gipoteza (yakor)
+    beam_out = model.generate(
         input_features,
         num_beams=num_beams,
-        num_beam_groups=num_beams,
-        diversity_penalty=1.0,
-        num_return_sequences=num_return_sequences,
+        num_return_sequences=1,
         return_dict_in_generate=True,
         output_scores=True,
         max_new_tokens=225,
         language="uk",
         task="transcribe",
-        custom_generate="transformers-community/group-beam-search",
-        trust_remote_code=True,
     )
+    beam_text = processor.batch_decode(beam_out.sequences, skip_special_tokens=True)[0]
+    beam_score = beam_out.sequences_scores[0].item() if hasattr(beam_out, "sequences_scores") and beam_out.sequences_scores is not None else 0.0
+    all_texts.append(beam_text)
+    all_scores.append(beam_score)
 
-    sequences = outputs.sequences
-    if hasattr(outputs, "sequences_scores") and outputs.sequences_scores is not None:
-        whisper_scores = outputs.sequences_scores.cpu().tolist()
+    # 2) Sampling: rizni gipotezy z temperaturoyu
+    sample_out = model.generate(
+        input_features,
+        do_sample=True,
+        num_return_sequences=num_return_sequences - 1,
+        temperature=0.7,
+        top_p=0.95,
+        return_dict_in_generate=True,
+        output_scores=True,
+        max_new_tokens=225,
+        language="uk",
+        task="transcribe",
+    )
+    sample_texts = processor.batch_decode(sample_out.sequences, skip_special_tokens=True)
+    # Dlya sampling — vykorystovuemo sredniu log-prob z transition_scores
+    if hasattr(sample_out, "scores") and sample_out.scores:
+        # Obchysluemo log-prob kozhnoyi posledovnosti
+        transition_scores = model.compute_transition_scores(
+            sample_out.sequences, sample_out.scores, normalize_logits=True
+        )
+        seq_scores = transition_scores.sum(dim=-1).cpu().tolist()
+        # Normalizuyemo na dovzhynu
+        seq_lens = (sample_out.sequences != processor.tokenizer.pad_token_id).sum(dim=-1).cpu().tolist()
+        seq_scores = [s / max(l, 1) for s, l in zip(seq_scores, seq_lens)]
     else:
-        whisper_scores = [0.0] * sequences.shape[0]
+        seq_scores = [beam_score] * len(sample_texts)
 
-    texts = processor.batch_decode(sequences, skip_special_tokens=True)
-    return texts, whisper_scores
+    all_texts.extend(sample_texts)
+    all_scores.extend(seq_scores)
+
+    return all_texts, all_scores
 
 
 def rescore(hypotheses, whisper_scores, lm_model, alpha: float, beta: float):
