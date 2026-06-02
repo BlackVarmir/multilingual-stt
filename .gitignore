@@ -12,3 +12,8 @@ venv312/
 kenlm_build/
 data/wiki_corpus.txt
 data/combined_corpus.txt
+web/
+
+
+#Ignore vscode AI rules
+.github\instructions\codacy.instructions.md
