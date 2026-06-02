@@ -63,9 +63,12 @@ def generate_beam(model, processor, audio_array, num_beams: int, num_return_sequ
     if device == "cuda":
         input_features = input_features.half()
 
+    # Diverse beam search: groups force vidchutno rizni hipotezy
     outputs = model.generate(
         input_features,
         num_beams=num_beams,
+        num_beam_groups=num_beams,
+        diversity_penalty=1.0,
         num_return_sequences=num_return_sequences,
         return_dict_in_generate=True,
         output_scores=True,
