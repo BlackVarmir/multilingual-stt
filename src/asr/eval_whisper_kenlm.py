@@ -75,8 +75,10 @@ def generate_beam(model, processor, audio_array, num_beams: int, num_return_sequ
     )
 
     sequences = outputs.sequences
-    # sequences_scores: sum of log-probs normalized by length (negative values, closer to 0 = better)
-    whisper_scores = outputs.sequences_scores.cpu().tolist()
+    if hasattr(outputs, "sequences_scores") and outputs.sequences_scores is not None:
+        whisper_scores = outputs.sequences_scores.cpu().tolist()
+    else:
+        whisper_scores = [0.0] * sequences.shape[0]
 
     texts = processor.batch_decode(sequences, skip_special_tokens=True)
     return texts, whisper_scores
@@ -154,10 +156,23 @@ def tune_alpha_beta(model, processor, samples, lm_model, num_beams: int, device:
         cached.append((hyps, w_scores))
         refs.append(sample["sentence"].strip().lower())
 
+    # Diagnostyka: skilky unikalnykh hipotez na zrazok
+    unique_counts = [len(set(h)) for h, _ in cached]
+    avg_unique = sum(unique_counts) / len(unique_counts)
+    print(f"\nDiagnostics: avg unique hypotheses per sample = {avg_unique:.2f} / {num_beams}")
+    print(f"Samples with all identical hypotheses: {sum(1 for c in unique_counts if c == 1)}/{len(cached)}")
+    print(f"\nExample (first 3 samples):")
+    for idx in range(min(3, len(cached))):
+        hyps, w_scores = cached[idx]
+        print(f"\n  Sample {idx}, ref: {refs[idx]!r}")
+        for i, (h, s) in enumerate(zip(hyps, w_scores)):
+            lm_s = lm_model.score(h, bos=True, eos=True)
+            print(f"    [{i}] w_score={s:.4f} lm_log10={lm_s:.2f} text={h!r}")
+
     best = (1.0, None, None)
     print("\nGrid search alpha/beta:")
-    for alpha in [0.0, 0.1, 0.3, 0.5, 0.7, 1.0, 1.5]:
-        for beta in [0.0, 0.5, 1.0, 1.5, 2.0]:
+    for alpha in [0.0, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0]:
+        for beta in [0.0, 1.0, 3.0, 5.0]:
             preds = [rescore(h, s, lm_model, alpha, beta).lower() for h, s in cached]
             wer = wer_metric.compute(predictions=preds, references=refs)
             print(f"  alpha={alpha}, beta={beta}: WER={wer:.4f}")
